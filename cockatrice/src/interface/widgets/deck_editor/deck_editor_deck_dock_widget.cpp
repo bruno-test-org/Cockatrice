@@ -284,16 +284,15 @@ void DeckEditorDeckDockWidget::createDeckDock()
 
 void DeckEditorDeckDockWidget::initializeFormats()
 {
-    QMap<QString, int> allFormats = CardDatabaseManager::query()->getAllFormatsWithCount();
+    QStringList allFormats = CardDatabaseManager::query()->getAllFormatsWithCount().keys();
 
     formatComboBox->clear(); // Remove "Loading Database..."
     formatComboBox->setEnabled(true);
 
     // Populate with formats
     formatComboBox->addItem("", "");
-    for (auto it = allFormats.constBegin(); it != allFormats.constEnd(); ++it) {
-        QString displayText = QString("%1").arg(it.key());
-        formatComboBox->addItem(displayText, it.key()); // store the raw key in itemData
+    for (auto formatName : allFormats) {
+        formatComboBox->addItem(formatName, formatName); // store the raw key in itemData
     }
 
     if (!deckModel->getDeckList()->getGameFormat().isEmpty()) {
@@ -548,6 +547,52 @@ void DeckEditorDeckDockWidget::cleanDeck()
     deckTagsDisplayWidget->setTags(deckModel->getDeckList()->getTags());
 }
 
+void DeckEditorDeckDockWidget::selectPrevCard()
+{
+    changeSelectedCard(-1);
+}
+
+void DeckEditorDeckDockWidget::selectNextCard()
+{
+    changeSelectedCard(1);
+}
+
+/**
+ * @brief Selects a card based on the change direction.
+ *
+ * @param changeBy The direction to change, -1 for previous, 1 for next.
+ */
+void DeckEditorDeckDockWidget::changeSelectedCard(int changeBy)
+{
+    if (changeBy == 0) {
+        return;
+    }
+
+    // Get the current index of the selected item
+    auto deckViewCurrentIndex = deckView->currentIndex();
+
+    auto nextIndex = deckViewCurrentIndex.siblingAtRow(deckViewCurrentIndex.row() + changeBy);
+    if (!nextIndex.isValid()) {
+        nextIndex = deckViewCurrentIndex;
+
+        // Increment to the next valid index, skipping header rows
+        AbstractDecklistNode *node;
+        do {
+            if (changeBy > 0) {
+                nextIndex = deckView->indexBelow(nextIndex);
+            } else {
+                nextIndex = deckView->indexAbove(nextIndex);
+            }
+            node = static_cast<AbstractDecklistNode *>(nextIndex.internalPointer());
+        } while (node && node->isDeckHeader());
+    }
+
+    if (nextIndex.isValid()) {
+        deckView->setCurrentIndex(nextIndex);
+        deckView->setFocus(Qt::FocusReason::MouseFocusReason);
+    }
+}
+
 /**
  * @brief Expands all parents of the given index.
  * @param sourceIndex The index to expand (model source index)
@@ -786,11 +831,8 @@ void DeckEditorDeckDockWidget::offsetCountAtIndex(const QModelIndex &idx, bool i
 
     emit requestDeckHistorySave(reason);
 
-    if (isIncrement) {
-        deckModel->incrementAmountAtIndex(sourceIndex);
-    } else {
-        deckModel->decrementAmountAtIndex(sourceIndex);
-    }
+    int offset = isIncrement ? 1 : -1;
+    deckModel->offsetCountAtIndex(sourceIndex, offset);
 
     emit deckModified();
 }
