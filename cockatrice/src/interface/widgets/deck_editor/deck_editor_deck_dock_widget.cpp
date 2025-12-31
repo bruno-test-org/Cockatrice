@@ -157,7 +157,7 @@ void DeckEditorDeckDockWidget::createDeckDock()
         QTimer::singleShot(100, this, &DeckEditorDeckDockWidget::updateBannerCardComboBox);
     });
     connect(deckModel, &DeckListModel::cardAddedAt, this, &DeckEditorDeckDockWidget::recursiveExpand);
-    connect(deckModel, &DeckListModel::deckReplaced, this, &DeckEditorDeckDockWidget::expandAll);
+    connect(deckModel, &DeckListModel::modelReset, this, &DeckEditorDeckDockWidget::expandAll);
 
     connect(bannerCardComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             &DeckEditorDeckDockWidget::setBannerCard);
@@ -570,6 +570,15 @@ void DeckEditorDeckDockWidget::changeSelectedCard(int changeBy)
 
     // Get the current index of the selected item
     auto deckViewCurrentIndex = deckView->currentIndex();
+
+    // For some reason, if the deckModel is modified but the view is not manually reselected,
+    // currentIndex will return an index for the underlying deckModel instead of the proxy.
+    // That index will return an invalid index when indexBelow/indexAbove crosses a header node,
+    // causing the selection to fail to move down.
+    /// \todo Figure out why it's happening so we can do a proper fix instead of a hacky workaround
+    if (deckViewCurrentIndex.model() == proxy->sourceModel()) {
+        deckViewCurrentIndex = proxy->mapFromSource(deckViewCurrentIndex);
+    }
 
     auto nextIndex = deckViewCurrentIndex.siblingAtRow(deckViewCurrentIndex.row() + changeBy);
     if (!nextIndex.isValid()) {
